@@ -7,22 +7,15 @@
 //  <last-date>2018-06-27 4:50</last-date>
 // -----------------------------------------------------------------------
 
-using System.ComponentModel;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
-
 using Liuliu.Demo.Identity;
 using Liuliu.Demo.Identity.Dtos;
 using Liuliu.Demo.Identity.Entities;
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-
 using OSharp.AspNetCore;
 using OSharp.AspNetCore.Mvc;
 using OSharp.AspNetCore.Mvc.Filters;
@@ -32,11 +25,21 @@ using OSharp.Core.Modules;
 using OSharp.Core.Options;
 using OSharp.Data;
 using OSharp.Entity;
+using OSharp.Extensions;
 using OSharp.Identity;
 using OSharp.Identity.JwtBearer;
-using OSharp.Json;
+using OSharp.Identity.OAuth2;
+using OSharp.Mapping;
 using OSharp.Net;
-using OSharp.Secutiry.Claims;
+using OSharp.Security.Claims;
+using System;
+using System.ComponentModel;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+using OSharp.Filter;
 
 
 namespace Liuliu.Demo.Web.Controllers
@@ -112,7 +115,7 @@ namespace Liuliu.Demo.Web.Controllers
         /// <param name="dto">注册信息</param>
         /// <returns>JSON操作结果</returns>
         [HttpPost]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [ModuleInfo]
         [DependOnFunction("CheckUserNameExists")]
         [DependOnFunction("CheckEmailExists")]
@@ -131,16 +134,18 @@ namespace Liuliu.Demo.Web.Controllers
                 return new AjaxResult("验证码错误，请刷新重试", AjaxResultType.Error);
             }
 
+            dto.UserName = dto.Email;
+            dto.NickName = $"User_{new Random().NextLetterAndNumberString(8)}"; //随机用户昵称
             dto.RegisterIp = HttpContext.GetClientIp();
 
             OperationResult<User> result = await _identityContract.Register(dto);
 
-            if (result.Successed)
+            if (result.Succeeded)
             {
                 User user = result.Data;
                 string code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
                 code = UrlBase64ReplaceChar(code);
-                string url = $"{Request.Scheme}://{Request.Host}/#/identity/confirm-email?userId={user.Id}&code={code}";
+                string url = $"{Request.Scheme}://{Request.Host}/#/passport/confirm-email?userId={user.Id}&code={code}";
                 string body =
                     $"亲爱的用户 <strong>{user.NickName}</strong>[{user.UserName}]，您好！<br>"
                     + $"欢迎注册，激活邮箱请 <a href=\"{url}\" target=\"_blank\"><strong>点击这里</strong></a><br>"
@@ -148,6 +153,8 @@ namespace Liuliu.Demo.Web.Controllers
                     + $"{url}<br>"
                     + $"祝您使用愉快！";
                 await SendMailAsync(user.Email, "柳柳软件 注册邮箱激活邮件", body);
+
+                return result.ToAjaxResult(m => new { m.UserName, m.NickName, m.Email });
             }
 
             return result.ToAjaxResult();
@@ -178,7 +185,7 @@ namespace Liuliu.Demo.Web.Controllers
             IUnitOfWork unitOfWork = HttpContext.RequestServices.GetUnitOfWork<User, int>();
             unitOfWork.Commit();
 
-            if (!result.Successed)
+            if (!result.Succeeded)
             {
                 return result.ToAjaxResult();
             }
@@ -210,27 +217,12 @@ namespace Liuliu.Demo.Web.Controllers
             IUnitOfWork unitOfWork = HttpContext.RequestServices.GetUnitOfWork<User, int>();
             unitOfWork.Commit();
 
-            if (!result.Successed)
+            if (!result.Succeeded)
             {
                 return result.ToAjaxResult();
             }
             User user = result.Data;
-
-            //生成Token，这里只包含最基本信息，其他信息从在线用户缓存中获取
-            Claim[] claims =
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.UserName)
-            };
-            OSharpOptions options = HttpContext.RequestServices.GetService<IOptions<OSharpOptions>>().Value;
-            string token = JwtHelper.CreateToken(claims, options);
-
-            //在线用户缓存
-            IOnlineUserCache onlineUserCache = HttpContext.RequestServices.GetService<IOnlineUserCache>();
-            if (onlineUserCache != null)
-            {
-                await onlineUserCache.GetOrRefreshAsync(user.UserName);
-            }
+            string token = await CreateJwtToken(user);
 
             return new AjaxResult("登录成功", AjaxResultType.Success, token);
         }
@@ -253,33 +245,141 @@ namespace Liuliu.Demo.Web.Controllers
 
         /// <summary>
         /// OAuth2登录回调
-        /// todo: 通过第三方信息查找用户信息，如果用户信息存在，则自动登录。不存在则跳转到注册页面
         /// </summary>
         /// <param name="returnUrl">登录成功返回URL</param>
         /// <param name="remoteError">远程错误信息</param>
         /// <returns></returns>
         [HttpGet]
         [Description("OAuth2登录回调")]
-        public async Task<IActionResult> OAuth2Callback(string returnUrl = null, string remoteError = null)
+        public async Task<ActionResult> OAuth2Callback(string returnUrl = null, string remoteError = null)
         {
             if (remoteError != null)
             {
                 Logger.LogError($"第三方登录错误：{remoteError}");
-                return Unauthorized();
+                return Json(new AjaxResult($"第三方登录错误：{remoteError}", AjaxResultType.UnAuth));
             }
+
+            string url;
             ExternalLoginInfo info = await _signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
-                return Unauthorized();
+                url = "/#/exception/500";
+                Logger.LogError("第三方登录返回的用户信息为空");
+                return Redirect(url);
             }
-            var result = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, false, true);
-            Logger.LogWarning($"SignInResult:{result.ToJsonString()}");
-            if (result.Succeeded)
+            UserLoginInfoEx loginInfo = info.ToUserLoginInfoEx();
+            var result = await _identityContract.LoginOAuth2(loginInfo);
+            // 登录不成功，将用户信息返回前端，让用户选择绑定现有账号还是创建新账号
+            if (!result.Succeeded)
             {
-                Logger.LogInformation($"用户“{info.Principal.Identity.Name}”通过 {info.ProviderDisplayName} OAuth2登录成功");
-                return Ok();
+                string cacheId = (string)result.Data;
+                loginInfo.ProviderKey = cacheId;
+                url = $"/#/passport/oauth-callback?type={loginInfo.LoginProvider}&id={cacheId}&name={loginInfo.ProviderDisplayName?.ToUrlEncode()}&avatar={loginInfo.AvatarUrl?.ToUrlEncode()}";
+                return Redirect(url);
             }
-            return Unauthorized();
+            Logger.LogInformation($"用户“{info.Principal.Identity.Name}”通过 {info.ProviderDisplayName} OAuth2登录成功");
+            string token = await CreateJwtToken((User)result.Data);
+            url = $"/#/passport/oauth-callback?token={token}";
+            return Redirect(url);
+        }
+
+        /// <summary>
+        /// 读取用户列表信息
+        /// </summary>
+        /// <returns>用户列表信息</returns>
+        [HttpPost]
+        [LoggedIn]
+        [ModuleInfo]
+        [Description("读取OAuth2")]
+        public PageData<UserLoginOutputDto> ReadOAuth2([FromServices]IFilterService filterService, PageRequest request)
+        {
+            int userId = User.Identity.GetUserId<int>();
+            request.FilterGroup.AddRule("UserId", userId);
+            request.AddDefaultSortCondition(new SortCondition("LoginProvider"));
+
+            Expression<Func<UserLogin, bool>> exp = filterService.GetExpression<UserLogin>(request.FilterGroup);
+            var page = _identityContract.UserLogins.ToPage<UserLogin, UserLoginOutputDto>(exp, request.PageCondition);
+            return page.ToPageData();
+        }
+
+        /// <summary>
+        /// 登录并绑定账号
+        /// </summary>
+        [HttpPost]
+        [ModuleInfo]
+        [Description("登录并绑定账号")]
+        [UnitOfWork]
+        public async Task<AjaxResult> LoginBind(UserLoginInfoEx loginInfo)
+        {
+            loginInfo.RegisterIp = HttpContext.GetClientIp();
+            OperationResult<User> result = await _identityContract.LoginBind(loginInfo);
+            IUnitOfWork unitOfWork = HttpContext.RequestServices.GetUnitOfWork<User, int>();
+            unitOfWork.Commit();
+            if (!result.Succeeded)
+            {
+                return result.ToAjaxResult();
+            }
+
+            User user = result.Data;
+            string token = await CreateJwtToken(user);
+            return new AjaxResult("登录成功", AjaxResultType.Success, token);
+        }
+
+        /// <summary>
+        /// 使用第三方账号一键登录
+        /// </summary>
+        [HttpPost]
+        [ModuleInfo]
+        [Description("第三方一键登录")]
+        public async Task<AjaxResult> LoginOneKey(UserLoginInfoEx loginInfo)
+        {
+            loginInfo.RegisterIp = HttpContext.GetClientIp();
+            OperationResult<User> result = await _identityContract.LoginOneKey(loginInfo.ProviderKey);
+            IUnitOfWork unitOfWork = HttpContext.RequestServices.GetUnitOfWork<User, int>();
+            unitOfWork.Commit();
+
+            if (!result.Succeeded)
+            {
+                return result.ToAjaxResult();
+            }
+
+            User user = result.Data;
+            string token = await CreateJwtToken(user);
+            return new AjaxResult("登录成功", AjaxResultType.Success, token);
+        }
+
+        private async Task<string> CreateJwtToken(User user)
+        {
+            //在线用户缓存
+            IOnlineUserCache onlineUserCache = HttpContext.RequestServices.GetService<IOnlineUserCache>();
+            if (onlineUserCache != null)
+            {
+                await onlineUserCache.GetOrRefreshAsync(user.UserName);
+            }
+
+            //生成Token，这里只包含最基本信息，其他信息从在线用户缓存中获取
+            Claim[] claims =
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.UserName)
+            };
+            OsharpOptions options = HttpContext.RequestServices.GetService<IOptions<OsharpOptions>>().Value;
+            string token = JwtHelper.CreateToken(claims, options);
+            return token;
+        }
+
+        /// <summary>
+        /// 解除第三方登录
+        /// </summary>
+        [HttpPost]
+        [LoggedIn]
+        [ModuleInfo]
+        [Description("解除第三方登录")]
+        [UnitOfWork]
+        public async Task<AjaxResult> RemoveOAuth2(Guid[] ids)
+        {
+            OperationResult result = await _identityContract.DeleteUserLogins(ids);
+            return result.ToAjaxResult();
         }
 
         /// <summary>
@@ -289,7 +389,7 @@ namespace Liuliu.Demo.Web.Controllers
         [HttpPost]
         [ModuleInfo]
         [Description("用户登出")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         public async Task<AjaxResult> Logout()
         {
             if (!User.Identity.IsAuthenticated)
@@ -319,6 +419,30 @@ namespace Liuliu.Demo.Web.Controllers
         }
 
         /// <summary>
+        /// 编辑用户资料
+        /// </summary>
+        /// <returns></returns>
+        [HttpPost]
+        [LoggedIn]
+        [ModuleInfo]
+        [Description("编辑用户资料")]
+        [UnitOfWork]
+        public async Task<AjaxResult> ProfileEdit(ProfileEditDto dto)
+        {
+            int userId = User.Identity.GetUserId<int>();
+            dto.Id = userId;
+            User user = await _userManager.FindByIdAsync(userId.ToString());
+            if (user == null)
+            {
+                return new AjaxResult("用户不存在", AjaxResultType.Error);
+            }
+
+            user = dto.MapTo(user);
+            var result = await _userManager.UpdateAsync(user);
+            return result.ToOperationResult().ToAjaxResult();
+        }
+
+        /// <summary>
         /// 激活邮箱
         /// </summary>
         /// <param name="dto">电子邮箱</param>
@@ -326,7 +450,7 @@ namespace Liuliu.Demo.Web.Controllers
         [HttpPost]
         [ModuleInfo]
         [Description("激活邮箱")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         public async Task<AjaxResult> ConfirmEmail(ConfirmEmailDto dto)
         {
             if (!ModelState.IsValid)
@@ -377,7 +501,7 @@ namespace Liuliu.Demo.Web.Controllers
             }
             string code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             code = UrlBase64ReplaceChar(code);
-            string url = $"{Request.Scheme}://{Request.Host}/#/identity/confirm-email?userId={user.Id}&code={code}";
+            string url = $"{Request.Scheme}://{Request.Host}/#/passport/confirm-email?userId={user.Id}&code={code}";
             string body =
                 $"亲爱的用户 <strong>{user.NickName}</strong>[{user.UserName}]，你好！<br>"
                 + $"欢迎注册，激活邮箱请 <a href=\"{url}\" target=\"_blank\"><strong>点击这里</strong></a><br>"
@@ -394,21 +518,24 @@ namespace Liuliu.Demo.Web.Controllers
         /// <param name="dto">修改密码信息</param>
         /// <returns>JSON操作结果</returns>
         [HttpPost]
-        [Logined]
+        [LoggedIn]
         [ModuleInfo]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("修改密码")]
         public async Task<AjaxResult> ChangePassword(ChangePasswordDto dto)
         {
             Check.NotNull(dto, nameof(dto));
 
-            User user = await _userManager.FindByIdAsync(dto.UserId.ToString());
+            int userId = User.Identity.GetUserId<int>();
+            User user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null)
             {
                 return new AjaxResult($"用户不存在", AjaxResultType.Error);
             }
 
-            IdentityResult result = await _userManager.ChangePasswordAsync(user, dto.OldPassword, dto.NewPassword);
+            IdentityResult result = string.IsNullOrEmpty(dto.OldPassword)
+                ? await _userManager.AddPasswordAsync(user, dto.NewPassword)
+                : await _userManager.ChangePasswordAsync(user, dto.OldPassword, dto.NewPassword);
             return result.ToOperationResult().ToAjaxResult();
         }
 
@@ -440,7 +567,7 @@ namespace Liuliu.Demo.Web.Controllers
             string token = await _userManager.GeneratePasswordResetTokenAsync(user);
             token = UrlBase64ReplaceChar(token);
             IEmailSender sender = HttpContext.RequestServices.GetService<IEmailSender>();
-            string url = $"{Request.Scheme}://{Request.Host}/#/identity/reset-password?userId={user.Id}&token={token}";
+            string url = $"{Request.Scheme}://{Request.Host}/#/passport/reset-password?userId={user.Id}&token={token}";
             string body = $"亲爱的用户 <strong>{user.NickName}</strong>[{user.UserName}]，您好！<br>"
                 + $"欢迎使用柳柳软件账户密码重置功能，请 <a href=\"{url}\" target=\"_blank\"><strong>点击这里</strong></a><br>"
                 + $"如果上面的链接无法点击，您可以复制以下地址，并粘贴到浏览器的地址栏中打开。<br>"
@@ -457,7 +584,7 @@ namespace Liuliu.Demo.Web.Controllers
         /// <returns>JSON操作结果</returns>
         [HttpPost]
         [ModuleInfo]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("重置登录密码")]
         public async Task<AjaxResult> ResetPassword(ResetPasswordDto dto)
         {

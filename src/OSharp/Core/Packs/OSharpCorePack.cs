@@ -16,7 +16,6 @@ using Microsoft.Extensions.Options;
 using OSharp.Caching;
 using OSharp.Core.Options;
 using OSharp.Entity;
-using OSharp.Entity.Infrastructure;
 using OSharp.Filter;
 
 
@@ -40,7 +39,7 @@ namespace OSharp.Core.Packs
         /// <returns></returns>
         public override IServiceCollection AddServices(IServiceCollection services)
         {
-            services.TryAddSingleton<IConfigureOptions<OSharpOptions>, OSharpOptionsSetup>();
+            services.TryAddSingleton<IConfigureOptions<OsharpOptions>, OsharpOptionsSetup>();
             services.TryAddSingleton<IEntityTypeFinder, EntityTypeFinder>();
             services.TryAddSingleton<IInputDtoTypeFinder, InputDtoTypeFinder>();
             services.TryAddSingleton<IOutputDtoTypeFinder, OutputDtoTypeFinder>();

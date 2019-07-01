@@ -9,9 +9,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
+using OSharp.Entity;
 using OSharp.Properties;
 
 
@@ -20,6 +23,7 @@ namespace OSharp.Data
     /// <summary>
     /// 参数合法性检查类
     /// </summary>
+    [DebuggerStepThrough]
     public static class Check
     {
         /// <summary>
@@ -113,14 +117,23 @@ namespace OSharp.Data
         /// 检查集合不能为空引用或空集合，否则抛出<see cref="ArgumentNullException"/>异常或<see cref="ArgumentException"/>异常。
         /// </summary>
         /// <typeparam name="T">集合项的类型。</typeparam>
-        /// <param name="collection"></param>
+        /// <param name="list"></param>
         /// <param name="paramName">参数名称。</param>
         /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="ArgumentException"></exception>
-        public static void NotNullOrEmpty<T>(IEnumerable<T> collection, string paramName)
+        public static void NotNullOrEmpty<T>(IReadOnlyList<T> list, string paramName)
         {
-            NotNull(collection, paramName);
-            Require<ArgumentException>(collection.Any(), string.Format(Resources.ParameterCheck_NotNullOrEmpty_Collection, paramName));
+            NotNull(list, paramName);
+            Require<ArgumentException>(list.Any(), string.Format(Resources.ParameterCheck_NotNullOrEmpty_Collection, paramName));
+        }
+
+        /// <summary>
+        /// 检查集合中没有包含值为null的项
+        /// </summary>
+        public static void HasNoNulls<T>(IReadOnlyList<T> list, string paramName)
+        {
+            NotNull(list, paramName);
+            Require<ArgumentException>(list.All(m => m != null), string.Format(Resources.ParameterCheck_NotContainsNull_Collection, paramName));
         }
 
         /// <summary>
@@ -206,6 +219,27 @@ namespace OSharp.Data
         {
             NotNull(filename, paramName);
             Require<FileNotFoundException>(File.Exists(filename), string.Format(Resources.ParameterCheck_FileNotExists, filename));
+        }
+
+        /// <summary>
+        /// 检查<see cref="IInputDto{TKey}"/>各属性的合法性，否则抛出<see cref="ValidationException"/>异常
+        /// </summary>
+        public static void Validate<TKey>(IInputDto<TKey> dto, string paramName)
+        {
+            NotNull(dto, paramName);
+            dto.Validate();
+        }
+
+        /// <summary>
+        /// 检查<see cref="IInputDto{TKey}"/>各属性的合法性，否则抛出<see cref="ValidationException"/>异常
+        /// </summary>
+        public static void Validate<TInputDto, TKey>(TInputDto[] dtos, string paramName) where TInputDto : IInputDto<TKey>
+        {
+            NotNull(dtos, paramName);
+            foreach (TInputDto dto in dtos)
+            {
+                dto.Validate();
+            }
         }
     }
 }

@@ -42,22 +42,25 @@ namespace OSharp.Redis
         public override IServiceCollection AddServices(IServiceCollection services)
         {
             IConfiguration configuration = services.GetConfiguration();
+            _enabled = configuration["OSharp:Redis:Enabled"].CastTo(false);
+            if (!_enabled)
+            {
+                return services;
+            }
+
             string config = configuration["OSharp:Redis:Configuration"];
             if (config.IsNullOrEmpty())
             {
                 throw new OsharpException("配置文件中Redis节点的Configuration不能为空");
             }
             string name = configuration["OSharp:Redis:InstanceName"].CastTo("RedisName");
-            _enabled = configuration["OSharp:Redis:Enabled"].CastTo(false);
-            if (_enabled)
+
+            services.RemoveAll(typeof(IDistributedCache));
+            services.AddDistributedRedisCache(opts =>
             {
-                services.RemoveAll(typeof(IDistributedCache));
-                services.AddDistributedRedisCache(opts =>
-                {
-                    opts.Configuration = config;
-                    opts.InstanceName = name;
-                });
-            }
+                opts.Configuration = config;
+                opts.InstanceName = name;
+            });
 
             return services;
         }

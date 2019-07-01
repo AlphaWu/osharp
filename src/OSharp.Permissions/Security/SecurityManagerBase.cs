@@ -26,7 +26,7 @@ using OSharp.Filter;
 using OSharp.Identity;
 using OSharp.Mapping;
 using OSharp.Security.Events;
-using OSharp.Secutiry;
+using OSharp.Security;
 
 
 namespace OSharp.Security
@@ -156,9 +156,10 @@ namespace OSharp.Security
         /// <returns>业务操作结果</returns>
         public virtual async Task<OperationResult> UpdateFunctions(params TFunctionInputDto[] dtos)
         {
-            Check.NotNull(dtos, nameof(dtos));
+            Check.Validate<TFunctionInputDto, Guid>(dtos, nameof(dtos));
+            
             OperationResult result = await _functionRepository.UpdateAsync(dtos,
-                async (dto, entity) =>
+                (dto, entity) =>
                 {
                     if (dto.IsLocked && entity.Area == "Admin" && entity.Controller == "Function"
                         && (entity.Action == "Update" || entity.Action == "Read"))
@@ -177,8 +178,9 @@ namespace OSharp.Security
                     {
                         entity.IsAccessTypeChanged = true;
                     }
+                    return Task.FromResult(0);
                 });
-            if (result.Successed)
+            if (result.Succeeded)
             {
                 //功能信息缓存刷新事件
                 FunctionCacheRefreshEventData clearEventData = new FunctionCacheRefreshEventData();
@@ -221,7 +223,7 @@ namespace OSharp.Security
         /// <returns>业务操作结果</returns>
         public virtual Task<OperationResult> UpdateEntityInfos(params TEntityInfoInputDto[] dtos)
         {
-            Check.NotNull(dtos, nameof(dtos));
+            Check.Validate<TEntityInfoInputDto, Guid>(dtos, nameof(dtos));
             return _entityInfoRepository.UpdateAsync(dtos);
         }
 
@@ -388,7 +390,7 @@ namespace OSharp.Security
             OperationResult result = await _moduleRepository.DeleteAsync(entity) > 0
                 ? new OperationResult(OperationResultType.Success, $"模块“{entity.Name}”删除成功")
                 : OperationResult.NoChanged;
-            if (result.Successed)
+            if (result.Succeeded)
             {
                 //功能权限缓存刷新事件
                 Guid[] functionIds = _moduleFunctionRepository.Query(m => m.Id.Equals(id)).Select(m => m.FunctionId).ToArray();
@@ -753,6 +755,8 @@ namespace OSharp.Security
         /// <returns>业务操作结果</returns>
         public virtual async Task<OperationResult> CreateEntityRoles(params TEntityRoleInputDto[] dtos)
         {
+            Check.Validate<TEntityRoleInputDto, Guid>(dtos, nameof(dtos));
+
             DataAuthCacheRefreshEventData eventData = new DataAuthCacheRefreshEventData();
             OperationResult result = await _entityRoleRepository.InsertAsync(dtos,
                 async dto =>
@@ -772,7 +776,7 @@ namespace OSharp.Security
                         throw new OsharpException($"角色“{role.Name}”和实体“{entityInfo.Name}”和操作“{dto.Operation}”的数据权限规则已存在，不能重复添加");
                     }
                     OperationResult checkResult = CheckFilterGroup(dto.FilterGroup, entityInfo);
-                    if (!checkResult.Successed)
+                    if (!checkResult.Succeeded)
                     {
                         throw new OsharpException($"数据规则验证失败：{checkResult.Message}");
                     }
@@ -787,7 +791,7 @@ namespace OSharp.Security
                         });
                     }
                 });
-            if (result.Successed && eventData.HasData())
+            if (result.Succeeded && eventData.HasData())
             {
                 _eventBus.Publish(eventData);
             }
@@ -801,6 +805,8 @@ namespace OSharp.Security
         /// <returns>业务操作结果</returns>
         public virtual async Task<OperationResult> UpdateEntityRoles(params TEntityRoleInputDto[] dtos)
         {
+            Check.Validate<TEntityRoleInputDto, Guid>(dtos, nameof(dtos));
+
             DataAuthCacheRefreshEventData eventData = new DataAuthCacheRefreshEventData();
             OperationResult result = await _entityRoleRepository.UpdateAsync(dtos,
                 async (dto, entity) =>
@@ -820,7 +826,7 @@ namespace OSharp.Security
                         throw new OsharpException($"角色“{role.Name}”和实体“{entityInfo.Name}”和操作“{dto.Operation}”的数据权限规则已存在，不能重复添加");
                     }
                     OperationResult checkResult = CheckFilterGroup(dto.FilterGroup, entityInfo);
-                    if (!checkResult.Successed)
+                    if (!checkResult.Succeeded)
                     {
                         throw new OsharpException($"数据规则验证失败：{checkResult.Message}");
                     }
@@ -841,7 +847,7 @@ namespace OSharp.Security
                     }
                 });
 
-            if (result.Successed && eventData.HasData())
+            if (result.Succeeded && eventData.HasData())
             {
                 _eventBus.Publish(eventData);
             }
@@ -866,7 +872,7 @@ namespace OSharp.Security
                         eventData.RemoveItems.Add(new DataAuthCacheItem() { RoleName = role.Name, EntityTypeFullName = entityInfo.TypeName, Operation = entity.Operation });
                     }
                 });
-            if (result.Successed && eventData.HasData())
+            if (result.Succeeded && eventData.HasData())
             {
                 //移除数据权限缓存
                 _eventBus.Publish(eventData);
@@ -906,7 +912,7 @@ namespace OSharp.Security
                 foreach (FilterGroup g in group.Groups)
                 {
                     result = CheckFilterGroup(g, entityInfo);
-                    if (!result.Successed)
+                    if (!result.Succeeded)
                     {
                         return result;
                     }
@@ -914,7 +920,7 @@ namespace OSharp.Security
             }
             Type entityType = Type.GetType(entityInfo.TypeName);
             result = FilterHelper.CheckFilterGroup(group, entityType);
-            if (!result.Successed)
+            if (!result.Succeeded)
             {
                 return result;
             }

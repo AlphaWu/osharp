@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------
 
 using System;
+using System.Data.Common;
 
 using OSharp.Entity;
 
@@ -17,12 +18,12 @@ namespace OSharp.Core.Options
     /// <summary>
     /// 数据上下文配置节点
     /// </summary>
-    public class OSharpDbContextOptions
+    public class OsharpDbContextOptions
     {
         /// <summary>
-        /// 初始化一个<see cref="OSharpDbContextOptions"/>类型的新实例
+        /// 初始化一个<see cref="OsharpDbContextOptions"/>类型的新实例
         /// </summary>
-        public OSharpDbContextOptions()
+        public OsharpDbContextOptions()
         {
             LazyLoadingProxiesEnabled = false;
             AuditEntityEnabled = false;

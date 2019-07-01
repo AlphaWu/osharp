@@ -11,12 +11,13 @@ using System;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using OSharp.AspNetCore.Mvc;
 using OSharp.Core.EntityInfos;
 using OSharp.Core.Functions;
 using OSharp.Core.Modules;
 using OSharp.Core.Packs;
 using OSharp.EventBuses;
-using OSharp.Secutiry;
+using OSharp.Security;
 
 
 namespace OSharp.Security
@@ -43,7 +44,7 @@ namespace OSharp.Security
     /// <typeparam name="TEntityRoleInputDto">实体角色输入DTO类型</typeparam>
     /// <typeparam name="TRoleKey">角色编号类型</typeparam>
     /// <typeparam name="TUserKey">用户编号类型</typeparam>
-    [DependsOnPacks(typeof(EventBusPack))]
+    [DependsOnPacks(typeof(EventBusPack), typeof(MvcFunctionPack))]
     public abstract class SecurityPackBase<TSecurityManager, TFunctionAuthorization, TFunctionAuthCache, TDataAuthCache, TModuleHandler, TFunction, TFunctionInputDto, TEntityInfo,
         TEntityInfoInputDto, TModule, TModuleInputDto, TModuleKey, TModuleFunction, TModuleRole, TModuleUser, TEntityRole, TEntityRoleInputDto, TRoleKey, TUserKey> : OsharpPack
         where TSecurityManager : class, IFunctionStore<TFunction, TFunctionInputDto>,

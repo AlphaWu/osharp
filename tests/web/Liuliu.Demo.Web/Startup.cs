@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 
 using OSharp.AspNetCore;
 using OSharp.Core.Builders;
+using OSharp.Entity;
 
 
 namespace Liuliu.Demo.Web

@@ -72,7 +72,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [Description("保存设置")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         public async Task<AjaxResult> Update(SettingInputDto dto)
         {
             Check.NotNull(dto, nameof(dto));
@@ -84,7 +84,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
             }
             ISetting setting = JsonConvert.DeserializeObject(dto.SettingJson, type) as ISetting;
             OperationResult result = await _keyValueStore.SaveSetting(setting);
-            if (result.Successed)
+            if (result.Succeeded)
             {
                 return new AjaxResult("设置保存成功");
             }

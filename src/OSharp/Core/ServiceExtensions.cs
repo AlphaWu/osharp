@@ -39,6 +39,9 @@ namespace Microsoft.Extensions.DependencyInjection
         {
             Check.NotNull(services, nameof(services));
 
+            IConfiguration configuration = services.GetConfiguration();
+            Singleton<IConfiguration>.Instance = configuration;
+
             //初始化所有程序集查找器
             services.TryAddSingleton<IAllAssemblyFinder>(new AppDomainAllAssemblyFinder());
 
@@ -57,15 +60,15 @@ namespace Microsoft.Extensions.DependencyInjection
         /// </summary>
         public static IConfiguration GetConfiguration(this IServiceCollection services)
         {
-            return services.GetSingletonInstance<IConfiguration>();
+            return services.GetSingletonInstanceOrNull<IConfiguration>();
         }
 
         /// <summary>
         /// 从服务提供者中获取OSharpOptions
         /// </summary>
-        public static OSharpOptions GetOSharpOptions(this IServiceProvider provider)
+        public static OsharpOptions GetOSharpOptions(this IServiceProvider provider)
         {
-            return provider.GetService<IOptions<OSharpOptions>>()?.Value;
+            return provider.GetService<IOptions<OsharpOptions>>()?.Value;
         }
 
         /// <summary>

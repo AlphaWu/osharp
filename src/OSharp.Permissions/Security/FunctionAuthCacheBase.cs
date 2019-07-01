@@ -19,7 +19,7 @@ using OSharp.Core.Functions;
 using OSharp.Dependency;
 using OSharp.Entity;
 using OSharp.Identity;
-using OSharp.Secutiry;
+using OSharp.Security;
 
 
 namespace OSharp.Security
@@ -134,6 +134,7 @@ namespace OSharp.Security
                 IRepository<TRole, TRoleKey> roleRepository = provider.GetService<IRepository<TRole, TRoleKey>>();
                 return roleRepository.Query(m => roleIds.Contains(m.Id)).Select(m => m.Name).Distinct().ToArray();
             });
+
             if (roleNames != null)
             {
                 _cache.Set(key, roleNames);

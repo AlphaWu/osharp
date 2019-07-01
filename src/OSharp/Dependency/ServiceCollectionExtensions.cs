@@ -7,13 +7,10 @@
 //  <last-date>2018-12-30 22:24</last-date>
 // -----------------------------------------------------------------------
 
+using Microsoft.Extensions.DependencyInjection;
+using OSharp.Reflection;
 using System;
 using System.Linq;
-
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
-using OSharp.Reflection;
 
 
 namespace OSharp.Dependency
@@ -82,10 +79,23 @@ namespace OSharp.Dependency
             var instance = services.GetSingletonInstanceOrNull<T>();
             if (instance == null)
             {
-                throw new InvalidOperationException($"无法找到单例服务：{typeof(T).AssemblyQualifiedName}");
+                throw new InvalidOperationException($"无法找到已注册的单例服务：{typeof(T).AssemblyQualifiedName}");
             }
 
             return instance;
+        }
+
+        /// <summary>
+        /// 从Scoped字典中获取指定类型的值
+        /// </summary>
+        public static T GetValue<T>(this ScopedDictionary dict, string key) where T : class
+        {
+            if (dict.TryGetValue(key, out object obj))
+            {
+                return obj as T;
+            }
+
+            return default(T);
         }
     }
 }

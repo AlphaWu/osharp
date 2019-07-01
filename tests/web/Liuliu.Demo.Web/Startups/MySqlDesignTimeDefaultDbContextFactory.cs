@@ -11,11 +11,14 @@ using System;
 using System.Reflection;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using OSharp.Core.Options;
+using OSharp.Data;
 using OSharp.Entity;
 using OSharp.Exceptions;
+using OSharp.Extensions;
 using OSharp.Reflection;
 
 
@@ -37,11 +40,12 @@ namespace Liuliu.Demo.Web.Startups
         {
             if (_serviceProvider == null)
             {
-                string str = AppSettingsManager.Get("OSharp:DbContexts:MySql:ConnectionString");
+                IConfiguration configuration = Singleton<IConfiguration>.Instance;
+                string str = configuration["OSharp:DbContexts:MySql:ConnectionString"];
                 return str;
             }
-            OSharpOptions options = _serviceProvider.GetOSharpOptions();
-            OSharpDbContextOptions contextOptions = options.GetDbContextOptions(typeof(DefaultDbContext));
+            OsharpOptions options = _serviceProvider.GetOSharpOptions();
+            OsharpDbContextOptions contextOptions = options.GetDbContextOptions(typeof(DefaultDbContext));
             if (contextOptions == null)
             {
                 throw new OsharpException($"上下文“{typeof(DefaultDbContext)}”的配置信息不存在");
@@ -49,15 +53,33 @@ namespace Liuliu.Demo.Web.Startups
             return contextOptions.ConnectionString;
         }
 
-        public override IEntityConfigurationTypeFinder GetEntityConfigurationTypeFinder()
+        public override IEntityManager GetEntityManager()
         {
             if (_serviceProvider != null)
             {
-                return _serviceProvider.GetService<IEntityConfigurationTypeFinder>();
+                return _serviceProvider.GetService<IEntityManager>();
             }
             IEntityConfigurationTypeFinder typeFinder = new EntityConfigurationTypeFinder(new AppDomainAllAssemblyFinder());
-            typeFinder.Initialize();
-            return typeFinder;
+            IEntityManager entityManager = new EntityManager(typeFinder);
+            entityManager.Initialize();
+            return entityManager;
+        }
+
+        public override bool LazyLoadingProxiesEnabled()
+        {
+            if (_serviceProvider == null)
+            {
+                IConfiguration configuration = Singleton<IConfiguration>.Instance;
+                return configuration["OSharp:DbContexts:MySql:LazyLoadingProxiesEnabled"].CastTo(false);
+            }
+            OsharpOptions options = _serviceProvider.GetOSharpOptions();
+            OsharpDbContextOptions contextOptions = options.GetDbContextOptions(typeof(DefaultDbContext));
+            if (contextOptions == null)
+            {
+                throw new OsharpException($"上下文“{typeof(DefaultDbContext)}”的配置信息不存在");
+            }
+
+            return contextOptions.LazyLoadingProxiesEnabled;
         }
 
         public override DbContextOptionsBuilder UseSql(DbContextOptionsBuilder builder, string connString)

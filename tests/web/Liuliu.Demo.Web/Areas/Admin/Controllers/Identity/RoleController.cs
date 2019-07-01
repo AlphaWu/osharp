@@ -28,6 +28,7 @@ using OSharp.AspNetCore.Mvc.Filters;
 using OSharp.AspNetCore.UI;
 using OSharp.Caching;
 using OSharp.Collections;
+using OSharp.Core;
 using OSharp.Core.Functions;
 using OSharp.Core.Modules;
 using OSharp.Data;
@@ -85,6 +86,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         /// </summary>
         /// <returns>角色节点列表</returns>
         [HttpGet]
+        [ModuleInfo]
         [Description("读取节点")]
         public RoleNode[] ReadNode()
         {
@@ -125,7 +127,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("新增")]
         public async Task<AjaxResult> Create(RoleInputDto[] dtos)
         {
@@ -152,7 +154,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("更新")]
         public async Task<AjaxResult> Update(RoleInputDto[] dtos)
         {
@@ -180,7 +182,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("删除")]
         public async Task<AjaxResult> Delete(int[] ids)
         {
@@ -208,7 +210,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [ModuleInfo]
         [DependOnFunction("Read")]
         [DependOnFunction("ReadRoleModules", Controller = "Module")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("设置模块")]
         public async Task<ActionResult> SetModules(RoleSetModuleDto dto)
         {

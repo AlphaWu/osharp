@@ -35,8 +35,6 @@ namespace OSharp.Exceptionless
         /// </summary>
         public override PackLevel Level => PackLevel.Application;
 
-        #region Overrides of OsharpPack
-
         /// <summary>
         /// 将模块服务添加到依赖注入服务容器中
         /// </summary>
@@ -46,15 +44,14 @@ namespace OSharp.Exceptionless
         {
             IConfiguration configuration = services.GetConfiguration();
             bool enabled = configuration["OSharp:Exceptionless:Enabled"].CastTo(false);
-            if (enabled)
+            if (!enabled)
             {
-                services.AddSingleton<ILoggerProvider, ExceptionlessLoggerProvider>();
+                return services;
             }
 
+            services.AddSingleton<ILoggerProvider, ExceptionlessLoggerProvider>();
             return services;
         }
-
-        #endregion
 
         /// <summary>
         /// 应用AspNetCore的服务业务
@@ -64,25 +61,27 @@ namespace OSharp.Exceptionless
         {
             IConfiguration configuration = app.ApplicationServices.GetService<IConfiguration>();
             bool enabled = configuration["OSharp:Exceptionless:Enabled"].CastTo(false);
-            if (enabled)
+            if (!enabled)
             {
-                string apiKey = configuration["OSharp:Exceptionless:ApiKey"];
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    throw new OsharpException("配置文件中Exceptionless节点的ApiKey不能为空");
-                }
-
-                ExceptionlessClient.Default.Configuration.ApiKey = apiKey;
-                string serverUrl = configuration["OSharp:Exceptionless:ServerUrl"];
-                if (!string.IsNullOrEmpty(serverUrl))
-                {
-                    ExceptionlessClient.Default.Configuration.ServerUrl = serverUrl;
-                }
-
-                app.UseExceptionless();
-
-                UsePack(app.ApplicationServices);
+                return;
             }
+
+            string apiKey = configuration["OSharp:Exceptionless:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                throw new OsharpException("配置文件中Exceptionless节点的ApiKey不能为空");
+            }
+
+            ExceptionlessClient.Default.Configuration.ApiKey = apiKey;
+            string serverUrl = configuration["OSharp:Exceptionless:ServerUrl"];
+            if (!string.IsNullOrEmpty(serverUrl))
+            {
+                ExceptionlessClient.Default.Configuration.ServerUrl = serverUrl;
+            }
+
+            app.UseExceptionless();
+
+            UsePack(app.ApplicationServices);
         }
 
     }

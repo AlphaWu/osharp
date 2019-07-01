@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using OSharp.Core.Options;
 using OSharp.Core.Packs;
+using OSharp.Dependency;
 
 
 namespace OSharp.Entity
@@ -41,8 +42,8 @@ namespace OSharp.Entity
         /// <param name="provider">服务提供者</param>
         public override void UsePack(IServiceProvider provider)
         { 
-            OSharpOptions options = provider.GetOSharpOptions();
-            OSharpDbContextOptions contextOptions = options.GetDbContextOptions(typeof(TDbContext));
+            OsharpOptions options = provider.GetOSharpOptions();
+            OsharpDbContextOptions contextOptions = options.GetDbContextOptions(typeof(TDbContext));
             if (contextOptions?.DatabaseType != DatabaseType)
             {
                 return;

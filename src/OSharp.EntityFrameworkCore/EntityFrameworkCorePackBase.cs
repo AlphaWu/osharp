@@ -37,6 +37,7 @@ namespace OSharp.Entity
         public override IServiceCollection AddServices(IServiceCollection services)
         {
             services.TryAddScoped(typeof(IRepository<,>), typeof(Repository<,>));
+            services.AddOsharpDbContext<DefaultDbContext>();
 
             return services;
         }
@@ -47,8 +48,8 @@ namespace OSharp.Entity
         /// <param name="provider">服务提供者</param>
         public override void UsePack(IServiceProvider provider)
         {
-            IEntityConfigurationTypeFinder finder = provider.GetService<IEntityConfigurationTypeFinder>();
-            finder?.Initialize();
+            IEntityManager manager = provider.GetService<IEntityManager>();
+            manager?.Initialize();
             IsEnabled = true;
         }
     }
